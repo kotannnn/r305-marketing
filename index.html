@@ -4079,6 +4079,13 @@ QB.push(
     reset_title: ['Réinitialiser la progression', 'Сбросить прогресс'], r_practice: ['Entraînement (réponses et session)', 'Тренировка (ответы и сессия)'],
     r_exams: ['Examens blancs et historique', 'Пробные экзамены и история'], r_lex: ['Lexique (je sais / à revoir)', 'Лексика (знаю / повторить)'], r_read: ['Théorie lue', 'Прочитанная теория'],
     reset_done: ['Progression réinitialisée', 'Прогресс сброшен'], reset_none: ['Coche au moins une case', 'Отметь хотя бы один пункт'],
+    sync_title: ['Copier ou transférer mes résultats', 'Скопировать или перенести результаты'],
+    sync_p: ['Copie tes résultats pour les coller dans la conversation avec Claude (analyse) ou les transférer vers un autre appareil.', 'Скопируй результаты, чтобы вставить их в чат с Claude (анализ) или перенести на другое устройство.'],
+    export_btn: ['Copier mes résultats', 'Скопировать результаты'], export_done: ['Résultats copiés : colle-les dans la conversation', 'Результаты скопированы: вставь их в чат'],
+    export_manual: ['Copie automatique impossible : sélectionne le texte ci-dessous et copie-le.', 'Не удалось скопировать автоматически: выдели текст ниже и скопируй.'],
+    import_lbl: ['Coller des résultats exportés pour les importer ici', 'Вставь экспортированные результаты, чтобы загрузить их сюда'],
+    import_btn: ['Importer', 'Загрузить'], import_done: ['Résultats importés', 'Результаты загружены'], import_bad: ['Texte non reconnu : colle le texte complet copié depuis le site.', 'Текст не распознан: вставь весь текст, скопированный с сайта.'],
+    import_note: ['L\'import remplace la progression de cet appareil.', 'Загрузка заменит прогресс на этом устройстве.'],
     storage_off: ['Ton navigateur bloque la sauvegarde : tes réponses seront perdues en fermant la page.', 'Браузер блокирует сохранение: ответы пропадут после закрытия страницы.'],
     saved_local: ['Tes réponses sont sauvegardées dans ce navigateur.', 'Ответы сохраняются в этом браузере.'],
     nothing_here: ['Aucune question ne correspond à ces filtres.', 'Нет вопросов под эти фильтры.'],
@@ -4358,7 +4365,7 @@ QB.push(
         '<div class="card"><div class="card-head"><h2>' + t('by_chapter') + '</h2></div><div class="chbars">' + bars + '</div></div>' +
       '</section>' +
       '<section class="card"><div class="card-head"><h2>' + t('strategy') + '</h2></div><p>' + t('strategy_p') + '</p>' + ev + '<p class="muted" style="margin-top:12px">' + t('strategy_tip') + '</p></section>' +
-      '<p class="muted" style="font-size:.85rem;margin:0">' + t('saved_local') + '</p>';
+      '<div class="row between"><p class="muted" style="font-size:.85rem;margin:0">' + t('saved_local') + '</p><button class="btn small" data-act="open-sync">' + t('export_btn') + '</button></div>';
   }
 
   /* ---------- Théorie ---------- */
@@ -4805,7 +4812,34 @@ QB.push(
       [['practice', 'r_practice'], ['exams', 'r_exams'], ['lex', 'r_lex'], ['read', 'r_read']].map(function (r) {
         return '<label class="check"><input type="checkbox" class="rs" value="' + r[0] + '"> ' + t(r[1]) + '</label>';
       }).join('') +
-      '<div class="row end"><button class="btn danger" data-act="reset-multi">' + icon('reset') + t('reset') + '</button></div>';
+      '<div class="row end"><button class="btn danger" data-act="reset-multi">' + icon('reset') + t('reset') + '</button></div>' +
+      '<hr style="border:0;border-top:1px solid var(--line);width:100%">' +
+      '<h2>' + t('sync_title') + '</h2><p class="muted" style="margin:0">' + t('sync_p') + '</p>' +
+      '<div class="row"><button class="btn primary" data-act="export">' + t('export_btn') + '</button></div>' +
+      '<textarea id="export-box" class="input" readonly rows="4" style="display:none;font-family:var(--font-mono);font-size:.75rem"></textarea>' +
+      '<div class="field"><label for="import-box">' + t('import_lbl') + '</label><textarea id="import-box" class="input" rows="3" style="font-family:var(--font-mono);font-size:.75rem" placeholder="R305-EXPORT:..."></textarea></div>' +
+      '<div class="row between"><span class="muted" style="font-size:.82rem">' + t('import_note') + '</span><button class="btn" data-act="import">' + t('import_btn') + '</button></div>';
+  }
+  function exportText() {
+    var payload = { app: 'r305', v: 2, at: new Date().toISOString(), lang: S.lang, prog: S.prog, exams: S.exams, history: S.history, lex: S.lex, read: S.read, practice: S.practice };
+    return 'R305-EXPORT:' + JSON.stringify(payload);
+  }
+  function doExport() {
+    var txt = exportText(); var box = $('#export-box');
+    function manual() { if (box) { box.style.display = 'block'; box.value = txt; box.focus(); box.select(); } toast(t('export_manual')); }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(function () { toast(t('export_done')); if (box) { box.style.display = 'block'; box.value = txt; } }, manual);
+      } else manual();
+    } catch (e) { manual(); }
+  }
+  function parseImport(raw) {
+    raw = (raw || '').trim(); var i = raw.indexOf('R305-EXPORT:'); if (i < 0) return null;
+    try {
+      var d = JSON.parse(raw.slice(i + 12));
+      if (!d || d.app !== 'r305' || typeof d.prog !== 'object') return null;
+      return d;
+    } catch (e) { return null; }
   }
   function submitHtml(eid) {
     var ex = S.exams[eid]; var n = Object.keys(ex.ans).length; var blank = ex.ids.length - n; var nf = Object.keys(ex.flags).length;
@@ -4856,7 +4890,20 @@ QB.push(
       case 'theme': S.theme = v; applyPrefs(); save(); openModal(settingsHtml()); break;
       case 'size': S.size = v; applyPrefs(); save(); openModal(settingsHtml()); break;
       case 'settings': openModal(settingsHtml()); break;
+      case 'open-sync': openModal(settingsHtml()); var ib = $('#import-box'); if (ib) ib.scrollIntoView({ block: 'center' }); doExport(); break;
       case 'close-modal': closeModal(); break;
+      case 'export': doExport(); break;
+      case 'import': {
+        var box = $('#import-box'); var d = parseImport(box && box.value);
+        if (!d) { toast(t('import_bad')); break; }
+        arm(el, function () {
+          S.prog = d.prog || {}; S.exams = d.exams || {}; S.history = Array.isArray(d.history) ? d.history : []; S.lex = d.lex || {}; S.read = d.read || {};
+          S.practice = d.practice || null; S.ui.exam = null;
+          var tmp = merge(defaults(), S); S = tmp; // nettoyage
+          saveNow(); if (storageOK) S = load(); closeModal(); render(); toast(t('import_done'));
+        });
+        break;
+      }
       case 'reset-multi': {
         var list = $$('#modal .rs').filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
         if (!list.length) { toast(t('reset_none')); break; }
